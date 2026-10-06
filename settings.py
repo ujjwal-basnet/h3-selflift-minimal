@@ -19,6 +19,7 @@ class RenderSettings(BaseModel):
     profile: Literal["quality", "fast", "lowmem"] = "quality"
     frames: int = Field(default=124, ge=22, le=345)
     seed: int = Field(default=9175, ge=0)
+    cache_weights: bool = False
     vram_limit: float | None = Field(default=None, gt=0)
 
     @property
@@ -26,6 +27,9 @@ class RenderSettings(BaseModel):
         recipe = PROFILES[self.profile].copy()
         if self.vram_limit is not None:
             recipe["vram_limit"] = self.vram_limit
+        if self.cache_weights:
+            recipe["vram_limit"] = min(recipe["vram_limit"], 6.0)
+            recipe["gpu_cap_gib"] = 10.5
         return recipe
 
     @field_validator("frames")

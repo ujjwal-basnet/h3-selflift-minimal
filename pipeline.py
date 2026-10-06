@@ -31,7 +31,10 @@ def load_pipeline(settings: RenderSettings, timings=None):
     paths = [PATH, *(ROOT / "models/nf4" / name for name in COMPANIONS)]
     pipe = MiniMaxH3Pipeline.from_pretrained(
         torch_dtype=torch.float32, device="cuda",
-        model_configs=[ModelConfig(path=str(path), **offload) for path in paths],
+        model_configs=[ModelConfig(path=str(path), **(offload |
+                       (dict(preparing_dtype=torch.float32, preparing_device="cuda")
+                        if settings.cache_weights and index == 0 else {})))
+                       for index, path in enumerate(paths)],
         processor_config=ModelConfig(path=str(ROOT / "models/h3/FL2VA/processor")),
         vram_limit=recipe["vram_limit"])
     video_decode, audio_decode = pipe.video_vae.decode_video, pipe.audio_vae.decode_audio
