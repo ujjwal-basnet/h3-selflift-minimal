@@ -5,8 +5,8 @@ Minimal Python/PyTorch workflow: H3 hybrid INT8, eight-step Turbo and experiment
 Requires Linux, Python 3.12, an NVIDIA CUDA GPU, system `ffmpeg` and [uv](https://docs.astral.sh/uv/getting-started/installation/). Budget at least 60 GB of disk. The tested T4 run peaked at 14.54 GiB GPU memory; 12 GB operation is unverified.
 
 ```bash
-git clone https://github.com/ujjwal-basnet/h3-selflift.git
-cd h3-selflift
+git clone https://github.com/ujjwal-basnet/h3-selflift-minimal.git
+cd h3-selflift-minimal
 uv sync --locked
 uv run python download_models.py
 uv run python main.py --prompt-file prompts/storm-guardian-scene-1.txt --output output/scene.mp4
