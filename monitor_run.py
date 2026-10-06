@@ -27,7 +27,7 @@ with log.open("w") as stream:
         except (FileNotFoundError,StopIteration,ProcessLookupError):
             pass
         (root/"memory-observation.json").write_text(json.dumps(measurements,indent=2))
-        time.sleep(3)
+        time.sleep(1)
     measurements["worker_exit_code"]=worker.wait()
     (root/"memory-observation.json").write_text(json.dumps(measurements,indent=2))
 sys.exit(measurements["worker_exit_code"])

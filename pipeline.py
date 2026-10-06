@@ -1,5 +1,6 @@
 """Standalone, disk-staged H3 inference with the validated precision settings."""
 import json
+import hashlib
 import os
 import resource
 import time
@@ -9,10 +10,10 @@ from settings import ROOT, RenderSettings
 os.environ.update(USE_TF="0", USE_FLAX="0", HF_HUB_DISABLE_PROGRESS_BARS="1")
 
 
-def load_pipeline(settings: RenderSettings):
+def load_pipeline(settings: RenderSettings, timings=None):
     import torch
     from diffsynth.pipelines.minimax_h3_audio_video import MiniMaxH3Pipeline, ModelConfig
-    from download_models import COMPANIONS, TURBO
+    from download_models import COMPANIONS, TURBO_FILES
     from hybrid_checkpoint import PATH, SHA256
     from hybrid_lora import HybridTurboLoader, turbo_metadata
     from safe_attention import enable_memory_efficient_attention
@@ -21,6 +22,7 @@ def load_pipeline(settings: RenderSettings):
     receipt = json.loads((ROOT / "hybrid-download.json").read_text())
     if receipt.get("status") != "verified" or receipt.get("sha256") != SHA256:
         raise ValueError("Run download_models.py to verify the hybrid checkpoint")
+    recipe = settings.recipe
     enable_memory_efficient_attention()
     offload = dict(offload_dtype="disk", offload_device="disk",
                    onload_dtype="disk", onload_device="disk",
@@ -31,7 +33,7 @@ def load_pipeline(settings: RenderSettings):
         torch_dtype=torch.float32, device="cuda",
         model_configs=[ModelConfig(path=str(path), **offload) for path in paths],
         processor_config=ModelConfig(path=str(ROOT / "models/h3/FL2VA/processor")),
-        vram_limit=settings.vram_limit)
+        vram_limit=recipe["vram_limit"])
     video_decode, audio_decode = pipe.video_vae.decode_video, pipe.audio_vae.decode_audio
 
     def decode_video(latents, **kwargs):
@@ -43,11 +45,26 @@ def load_pipeline(settings: RenderSettings):
         return audio_decode(latents.float(), **kwargs)
 
     pipe.video_vae.decode_video, pipe.audio_vae.decode_audio = decode_video, decode_audio
-    turbo_path = ROOT / "models/turbo" / TURBO
+    turbo_path = ROOT / "models/turbo" / TURBO_FILES[recipe["steps"]]
     metadata = turbo_metadata(turbo_path)
+    with turbo_path.open("rb") as stream:
+        metadata.update(filename=turbo_path.name,
+                        sha256=hashlib.file_digest(stream, "sha256").hexdigest())
     pipe.lora_loader = HybridTurboLoader
     pipe.load_lora(pipe.dit, ModelConfig(path=str(turbo_path)), alpha=metadata["scale"])
-    attach_selflift(pipe, height=480, width=800, transition_step=6, rho=0.4,
+    if timings is not None:
+        pipe.video_vae.decode_video = timings.wrap(pipe.video_vae.decode_video, "video_decode")
+        pipe.video_vae.encode_video = timings.wrap(pipe.video_vae.encode_video, "video_encode_lift")
+        pipe.audio_vae.decode_audio = timings.wrap(pipe.audio_vae.decode_audio, "audio_decode")
+        pipe.load_models_to_device = timings.wrap(pipe.load_models_to_device, "stage_models")
+        pipe.cfg_guided_model_fn = timings.wrap(pipe.cfg_guided_model_fn, "dit_evaluation")
+        original_runner = pipe.unit_runner
+        def unit_runner(unit, *args, **kwargs):
+            with timings.measure("unit:" + type(unit).__name__):
+                return original_runner(unit, *args, **kwargs)
+        pipe.unit_runner = unit_runner
+    attach_selflift(pipe, height=recipe["target_height"], width=recipe["target_width"],
+                    transition_step=recipe["transition_step"], rho=0.4,
                     seed=9174, vae_tile_size=256)
     return pipe, metadata
 
@@ -60,24 +77,37 @@ def render(prompt: str, output: Path, settings: RenderSettings | None = None):
     settings = settings or RenderSettings()
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
+    recipe = settings.recipe
+    if recipe["gpu_cap_gib"] is not None:
+        capacity = torch.cuda.get_device_properties(0).total_memory / 2**30
+        torch.cuda.set_per_process_memory_fraction(min(recipe["gpu_cap_gib"] / capacity, 1.0))
+    torch.cuda.reset_peak_memory_stats()
+    from timings import StageTimings
+    timings = StageTimings(output.with_suffix(".timings.json"))
     started = time.time()
     report = dict(status="started", settings=settings.model_dump(), prompt=prompt,
                   gpu=torch.cuda.get_device_name(0), torch=torch.__version__,
-                  recipe="hybrid-int8-turbo8-selflift-zero", width=800, height=480)
+                  recipe=recipe,
+                  git_commit=os.environ.get("H3_GIT_COMMIT", "unknown"),
+                  width=recipe["target_width"], height=recipe["target_height"])
     receipt = output.with_suffix(".json")
     receipt.write_text(json.dumps(report, indent=2))
     try:
-        pipe, metadata = load_pipeline(settings)
-        video, audio = pipe(prompt=prompt, width=640, height=384,
-                            num_frames=settings.frames, num_inference_steps=8,
-                            seed=settings.seed, flow_shift=6.0, cfg_scale=1,
+        with timings.measure("load_pipeline"):
+            pipe, metadata = load_pipeline(settings, timings)
+        with timings.measure("generate_total"):
+            video, audio = pipe(prompt=prompt, width=recipe["width"], height=recipe["height"],
+                            num_frames=settings.frames, num_inference_steps=recipe["steps"],
+                            seed=settings.seed, flow_shift=6.0, audio_flow_shift=3.0, cfg_scale=1,
                             tiled=True, tile_size=256, tile_overlap=32)
         if not torch.isfinite(torch.as_tensor(audio)).all():
             raise ValueError("Generated audio contains non-finite samples")
-        write_video_audio(video=video, audio=audio, output_path=str(output),
+        with timings.measure("export"):
+            write_video_audio(video=video, audio=audio, output_path=str(output),
                           fps=24, audio_sample_rate=32000)
         report.update(status="success", video_file=output.name, turbo_metadata=metadata,
                       selflift_diagnostics=pipe.selflift_diagnostics,
+                      stage_timings=timings.events,
                       peak_allocated_vram_gib=torch.cuda.max_memory_allocated() / 2**30,
                       peak_reserved_vram_gib=torch.cuda.max_memory_reserved() / 2**30)
     except Exception as error:
@@ -85,6 +115,9 @@ def render(prompt: str, output: Path, settings: RenderSettings | None = None):
         raise
     finally:
         report.update(elapsed_seconds=time.time() - started,
+                      stage_timings=timings.events,
+                      peak_allocated_vram_gib=torch.cuda.max_memory_allocated() / 2**30,
+                      peak_reserved_vram_gib=torch.cuda.max_memory_reserved() / 2**30,
                       peak_resident_ram_gib=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2**20)
         receipt.write_text(json.dumps(report, indent=2))
     return output
