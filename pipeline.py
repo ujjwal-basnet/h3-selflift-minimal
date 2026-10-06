@@ -10,6 +10,16 @@ from settings import ROOT, RenderSettings
 os.environ.update(USE_TF="0", USE_FLAX="0", HF_HUB_DISABLE_PROGRESS_BARS="1")
 
 
+def configure_memory(settings: RenderSettings):
+    """Apply the profile's allocator cap, including direct load_pipeline callers."""
+    import torch
+    capacity = torch.cuda.get_device_properties(0).total_memory / 2**30
+    cap = settings.recipe["gpu_cap_gib"]
+    fraction = min(cap / capacity, 1.0) if cap is not None else 1.0
+    torch.cuda.set_per_process_memory_fraction(fraction)
+    return capacity * fraction
+
+
 def load_pipeline(settings: RenderSettings, timings=None):
     import torch
     from diffsynth.pipelines.minimax_h3_audio_video import MiniMaxH3Pipeline, ModelConfig
@@ -23,6 +33,7 @@ def load_pipeline(settings: RenderSettings, timings=None):
     if receipt.get("status") != "verified" or receipt.get("sha256") != SHA256:
         raise ValueError("Run download_models.py to verify the hybrid checkpoint")
     recipe = settings.recipe
+    configure_memory(settings)
     enable_memory_efficient_attention()
     offload = dict(offload_dtype="disk", offload_device="disk",
                    onload_dtype="disk", onload_device="disk",
@@ -49,6 +60,8 @@ def load_pipeline(settings: RenderSettings, timings=None):
 
     pipe.video_vae.decode_video, pipe.audio_vae.decode_audio = decode_video, decode_audio
     turbo_path = ROOT / "models/turbo" / TURBO_FILES[recipe["steps"]]
+    if not turbo_path.is_file():
+        raise FileNotFoundError(f"Download this adapter first: uv run python download_models.py --steps {recipe['steps']}")
     metadata = turbo_metadata(turbo_path)
     with turbo_path.open("rb") as stream:
         metadata.update(filename=turbo_path.name,
@@ -81,16 +94,14 @@ def render(prompt: str, output: Path, settings: RenderSettings | None = None):
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     recipe = settings.recipe
-    if recipe["gpu_cap_gib"] is not None:
-        capacity = torch.cuda.get_device_properties(0).total_memory / 2**30
-        torch.cuda.set_per_process_memory_fraction(min(recipe["gpu_cap_gib"] / capacity, 1.0))
+    effective_cap = configure_memory(settings)
     torch.cuda.reset_peak_memory_stats()
     from timings import StageTimings
     timings = StageTimings(output.with_suffix(".timings.json"))
     started = time.time()
     report = dict(status="started", settings=settings.model_dump(), prompt=prompt,
                   gpu=torch.cuda.get_device_name(0), torch=torch.__version__,
-                  recipe=recipe,
+                  recipe=recipe, effective_allocator_cap_gib=effective_cap,
                   git_commit=os.environ.get("H3_GIT_COMMIT", "unknown"),
                   width=recipe["target_width"], height=recipe["target_height"])
     receipt = output.with_suffix(".json")
