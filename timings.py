@@ -19,6 +19,7 @@ class StageTimings:
         finally:
             torch.cuda.synchronize()
             self.events.append(dict(stage=name, seconds=time.perf_counter() - started,
+                                    cumulative_peak_allocated_gib=torch.cuda.max_memory_allocated() / 2**30,
                                     allocated_gib=torch.cuda.memory_allocated() / 2**30,
                                     reserved_gib=torch.cuda.memory_reserved() / 2**30))
             self.path.write_text(json.dumps(self.events, indent=2))

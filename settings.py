@@ -19,6 +19,7 @@ PROFILES = {
 class RenderSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     profile: Literal["quality", "fast", "lowmem", "vram8"] = "quality"
+    turbo_steps: Literal[4, 8] | None = None
     frames: int = Field(default=124, ge=22, le=345)
     seed: int = Field(default=9175, ge=0)
     cache_weights: bool = False
@@ -27,6 +28,9 @@ class RenderSettings(BaseModel):
     @property
     def recipe(self):
         recipe = PROFILES[self.profile].copy()
+        if self.turbo_steps is not None:
+            recipe["steps"] = self.turbo_steps
+            recipe["transition_step"] = 3 * self.turbo_steps // 4
         if self.vram_limit is not None:
             recipe["vram_limit"] = self.vram_limit
         if self.cache_weights:

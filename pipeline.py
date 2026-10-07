@@ -76,6 +76,12 @@ def load_pipeline(settings: RenderSettings, timings=None):
         state = load_state_dict(str(turbo_path), torch_dtype=torch.bfloat16, device="cpu")
         pipe.load_lora(pipe.dit, state_dict=state, alpha=metadata["scale"])
         del state
+        weights = [tensor for module in pipe.dit.modules()
+                   for attribute in ("lora_A_weights", "lora_B_weights")
+                   for tensor in getattr(module, attribute, [])]
+        if not all(tensor.device.type == "cpu" for tensor in weights):
+            raise ValueError("The under-8 profile requires all adapter weights to remain on CPU")
+        metadata["storage_gib"] = sum(t.numel() * t.element_size() for t in weights) / 2**30
         metadata["storage"] = "cpu_bfloat16_streamed_as_float32"
     else:
         pipe.load_lora(pipe.dit, ModelConfig(path=str(turbo_path)), alpha=metadata["scale"])
