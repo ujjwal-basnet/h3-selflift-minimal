@@ -2,7 +2,7 @@
 
 Minimal Python/PyTorch workflow: H3 hybrid INT8, four/eight-step Turbo and experimental SelfLift-zero. No ComfyUI runtime.
 
-Requires Linux, Python 3.12, an NVIDIA CUDA GPU, system `ffmpeg` and [uv](https://docs.astral.sh/uv/getting-started/installation/). Budget at least 60 GB of disk. The `vram8` short test on a Colab T4 used 4.49 GiB sampled device memory and 9.46 GiB process RAM. It took 9 minutes 52 seconds, excluding setup. Longer clips and a physical 8 GB GPU remain unverified.
+Requires Linux, Python 3.12, an NVIDIA CUDA GPU, system `ffmpeg` and [uv](https://docs.astral.sh/uv/getting-started/installation/). Budget at least 60 GB of disk. The `vram8` 15-second film on a Colab T4 used 6.44 GiB sampled device memory and 9.41 GiB process RAM. It took 53 minutes 51 seconds, excluding setup/downloads. This uses three five-second scenes; a continuous 15-second generation and physical 8 GB GPU remain unverified.
 
 ```bash
 git clone https://github.com/ujjwal-basnet/h3-selflift-minimal.git
@@ -22,7 +22,13 @@ uv run jupyter lab studio.ipynb
 
 Select the **H3 SelfLift** kernel. Optional Colab setup is inside the notebook; choose a GPU runtime and run the uv subprocess cells.
 
-Edit the prompt files to change the video. `main.py` renders one scene. The tested `vram8` recipe produces 640×384 at 24 fps with audio and keeps Turbo weights in CPU RAM. Start with 39 frames (1.625 seconds); 124 frames requests about 5.17 seconds, with memory use still to be measured. Run one job at a time.
+Edit the prompt files to change the video. `main.py` renders one scene. The tested `vram8` recipe produces 640×384 at 24 fps with audio and keeps Turbo weights in CPU RAM. Start with 39 frames (1.625 seconds); 124 frames produces about 5.17 seconds. Run one job at a time.
+
+To generate the tested 15-second film:
+
+```bash
+uv run python render_story.py --profile vram8
+```
 
 The default `quality` profile uses eight steps and 800×480. Download its adapter with `download_models.py --steps 8`. `render_story.py` uses that larger profile to assemble a 15-second film; the earlier T4 film took about 73 minutes and peaked at 14.54 GiB device memory.
 
@@ -41,6 +47,6 @@ Upstream: [MiniMax H3](https://huggingface.co/MiniMaxAI/MiniMax-H3), [hybrid che
 
 ## Generated outputs
 
-[Under-8-GB short test](samples/vram8-colab-39.mp4) · [15-second film](samples/storm-guardian-15s.mp4) · [Earlier four-step test](samples/lowmem-39.mp4). The notebook includes playback cells; see [sample settings](samples/README.md).
+[Under-8-GB 15-second film](samples/vram8-film-15s.mp4) · [Short test](samples/vram8-colab-39.mp4) · [Earlier quality film](samples/storm-guardian-15s.mp4). The notebook includes playback cells; see [sample settings](samples/README.md).
 
-![Under-8-GB test frames](samples/vram8-preview.jpg)
+![Under-8-GB film frames](samples/vram8-film-preview.jpg)
