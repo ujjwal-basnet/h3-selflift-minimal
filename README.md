@@ -1,15 +1,15 @@
 # H3 SelfLift
 
-Minimal Python/PyTorch workflow: H3 hybrid INT8, eight-step Turbo and experimental SelfLift-zero. No ComfyUI runtime.
+Minimal Python/PyTorch workflow: H3 hybrid INT8, four/eight-step Turbo and experimental SelfLift-zero. No ComfyUI runtime.
 
-Requires Linux, Python 3.12, an NVIDIA CUDA GPU, system `ffmpeg` and [uv](https://docs.astral.sh/uv/getting-started/installation/). Budget at least 60 GB of disk. The tested T4 run peaked at 14.54 GiB GPU memory; 12 GB operation is unverified.
+Requires Linux, Python 3.12, an NVIDIA CUDA GPU, system `ffmpeg` and [uv](https://docs.astral.sh/uv/getting-started/installation/). Budget at least 60 GB of disk. The `vram8` short test on a Colab T4 used 4.49 GiB sampled device memory and 9.46 GiB process RAM. It took 9 minutes 52 seconds, excluding setup. Longer clips and a physical 8 GB GPU remain unverified.
 
 ```bash
 git clone https://github.com/ujjwal-basnet/h3-selflift-minimal.git
 cd h3-selflift-minimal
 uv sync --locked
-uv run python download_models.py
-uv run python main.py --prompt-file prompts/storm-guardian-scene-1.txt --output output/scene.mp4
+uv run python download_models.py --steps 4
+uv run python monitor_run.py --profile vram8 --frames 39 --output output/scene.mp4
 ```
 
 For a notebook:
@@ -22,7 +22,9 @@ uv run jupyter lab studio.ipynb
 
 Select the **H3 SelfLift** kernel. Optional Colab setup is inside the notebook; choose a GPU runtime and run the uv subprocess cells.
 
-Edit the prompt files to change the video. `main.py` renders one scene; `uv run python render_story.py` renders three scenes in fresh workers and joins them into 15 seconds. Output is 800×480 at 24 fps with audio. The tested three-scene T4 run took about 73 minutes. Run one job at a time.
+Edit the prompt files to change the video. `main.py` renders one scene. The tested `vram8` recipe produces 640×384 at 24 fps with audio and keeps Turbo weights in CPU RAM. Start with 39 frames (1.625 seconds); 124 frames requests about 5.17 seconds, with memory use still to be measured. Run one job at a time.
+
+The default `quality` profile uses eight steps and 800×480. Download its adapter with `download_models.py --steps 8`. `render_story.py` uses that larger profile to assemble a 15-second film; the earlier T4 film took about 73 minutes and peaked at 14.54 GiB device memory.
 
 ```python
 from pathlib import Path
@@ -30,7 +32,7 @@ from settings import RenderSettings
 from pipeline import render
 
 render('A quiet forest stream, steady camera, flowing water ambience.',
-       Path('output/stream.mp4'), RenderSettings(frames=39, seed=9175))
+       Path('output/stream.mp4'), RenderSettings(profile='vram8', frames=39, seed=9175))
 ```
 
 Frames must be 17n+5 between 22 and 345. Model files download into `models/`; generated files go into `output/`. Both are ignored by Git. `vram_limit` controls staging, not a hard total memory cap.
@@ -39,6 +41,6 @@ Upstream: [MiniMax H3](https://huggingface.co/MiniMaxAI/MiniMax-H3), [hybrid che
 
 ## Generated outputs
 
-[15-second film](samples/storm-guardian-15s.mp4) · [Short four-step test](samples/lowmem-39.mp4). The notebook includes playback cells. These samples are not under-8-GB validation; see [sample settings](samples/README.md).
+[Under-8-GB short test](samples/vram8-colab-39.mp4) · [15-second film](samples/storm-guardian-15s.mp4) · [Earlier four-step test](samples/lowmem-39.mp4). The notebook includes playback cells; see [sample settings](samples/README.md).
 
-![Short test frames](samples/preview.jpg)
+![Under-8-GB test frames](samples/vram8-preview.jpg)

@@ -1,5 +1,6 @@
 # Generated samples
 
+- [Colab under-8-GB test](vram8-colab-39.mp4): 39 frames / 1.625 seconds, 640×384, 24 fps with audio. Hybrid INT8 + four-step Turbo + SelfLift, `vram8` profile at code `1eca7d5`. Colab T4: 592.13 seconds excluding setup, 4.49 GiB sampled device peak, 4.35 GiB peak PyTorch allocation, 9.46 GiB process RAM high-water mark. Device polling is once per second; longer clips and a physical 8 GB GPU remain unverified.
 - [Storm Guardian film](storm-guardian-15s.mp4): 15 seconds, 800×480, 24 fps, generated audio. The original working eight-step H3 Turbo + SelfLift recipe.
 - [Four-step test](lowmem-39.mp4): 39 frames / 1.625 seconds, 640×384, generated audio. Generated on the experimental branch at `b1b2702`; 441.21 seconds on T4, 9.41 GiB sampled device peak. This clip does **not** demonstrate under-8-GB operation.
 
