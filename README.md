@@ -36,3 +36,9 @@ render('A quiet forest stream, steady camera, flowing water ambience.',
 Frames must be 17n+5 between 22 and 345. Model files download into `models/`; generated files go into `output/`. Both are ignored by Git. `vram_limit` controls staging, not a hard total memory cap.
 
 Upstream: [MiniMax H3](https://huggingface.co/MiniMaxAI/MiniMax-H3), [hybrid checkpoint](https://huggingface.co/smhfacct/Minimax-H3-fl2va-ref2va-hybrid-models), [DiffSynth-Studio and NF4 components](https://github.com/modelscope/DiffSynth-Studio), [LightX2V Turbo](https://huggingface.co/lightx2v/Minimax-h3-Turbo), [SelfLift research](https://arxiv.org/abs/2609.02036), and [comfy-kitchen](https://github.com/Comfy-Org/comfy-kitchen). Their licenses and model terms apply. This is an experimental H3 adaptation of SelfLift-zero; no trained SelfLift LoRA or upstream weights are included.
+
+## Generated outputs
+
+[15-second film](samples/storm-guardian-15s.mp4) · [Short four-step test](samples/lowmem-39.mp4). The notebook includes playback cells. These samples are not under-8-GB validation; see [sample settings](samples/README.md).
+
+![Short test frames](samples/preview.jpg)
