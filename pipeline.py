@@ -79,7 +79,7 @@ def load_pipeline(settings: RenderSettings, timings=None):
         weights = [tensor for module in pipe.dit.modules()
                    for attribute in ("lora_A_weights", "lora_B_weights")
                    for tensor in getattr(module, attribute, [])]
-        if not all(tensor.device.type == "cpu" for tensor in weights):
+        if not weights or not all(tensor.device.type == "cpu" for tensor in weights):
             raise ValueError("The under-8 profile requires all adapter weights to remain on CPU")
         metadata["storage_gib"] = sum(t.numel() * t.element_size() for t in weights) / 2**30
         metadata["storage"] = "cpu_bfloat16_streamed_as_float32"
