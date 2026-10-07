@@ -5,6 +5,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ROOT = Path(__file__).resolve().parent
 PROFILES = {
+    "vram8": dict(steps=4, transition_step=3, width=512, height=320,
+                  target_width=640, target_height=384, vram_limit=2.5, gpu_cap_gib=6.5),
     "quality": dict(steps=8, transition_step=6, width=640, height=384,
                     target_width=800, target_height=480, vram_limit=10, gpu_cap_gib=None),
     "fast": dict(steps=4, transition_step=3, width=640, height=384,
@@ -16,7 +18,7 @@ PROFILES = {
 
 class RenderSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    profile: Literal["quality", "fast", "lowmem"] = "quality"
+    profile: Literal["quality", "fast", "lowmem", "vram8"] = "quality"
     frames: int = Field(default=124, ge=22, le=345)
     seed: int = Field(default=9175, ge=0)
     cache_weights: bool = False
@@ -29,7 +31,7 @@ class RenderSettings(BaseModel):
             recipe["vram_limit"] = self.vram_limit
         if self.cache_weights:
             recipe["vram_limit"] = min(recipe["vram_limit"], 6.0)
-            recipe["gpu_cap_gib"] = 10.5
+            recipe["gpu_cap_gib"] = min(recipe["gpu_cap_gib"] or 10.5, 10.5)
         return recipe
 
     @field_validator("frames")

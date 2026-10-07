@@ -9,7 +9,7 @@ def main():
     parser.add_argument("--prompt-file", type=Path, default=ROOT / "prompts/storm-guardian-scene-1.txt")
     parser.add_argument("--output", type=Path, default=ROOT / "output/scene.mp4")
     parser.add_argument("--cache-weights", action="store_true", help="Experiment: retain some DiT weights in GPU memory")
-    parser.add_argument("--profile", choices=["quality", "fast", "lowmem"], default="quality")
+    parser.add_argument("--profile", choices=["quality", "fast", "lowmem", "vram8"], default="quality")
     parser.add_argument("--frames", type=int, default=124)
     parser.add_argument("--seed", type=int, default=9175)
     parser.add_argument("--vram-limit", type=float, default=None)

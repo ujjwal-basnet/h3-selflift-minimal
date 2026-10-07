@@ -67,7 +67,19 @@ def load_pipeline(settings: RenderSettings, timings=None):
         metadata.update(filename=turbo_path.name,
                         sha256=hashlib.file_digest(stream, "sha256").hexdigest())
     pipe.lora_loader = HybridTurboLoader
-    pipe.load_lora(pipe.dit, ModelConfig(path=str(turbo_path)), alpha=metadata["scale"])
+    if settings.profile == "vram8":
+        from diffsynth.core import load_state_dict
+        # Preserve the adapter's BF16 values on CPU. The pinned scales are powers
+        # of two; the upstream hotload path casts each pair to FP32 on demand.
+        if metadata["scale"] not in (1.0, 0.0625):
+            raise ValueError("CPU BF16 adapter storage requires the verified pinned Turbo scale")
+        state = load_state_dict(str(turbo_path), torch_dtype=torch.bfloat16, device="cpu")
+        pipe.load_lora(pipe.dit, state_dict=state, alpha=metadata["scale"])
+        del state
+        metadata["storage"] = "cpu_bfloat16_streamed_as_float32"
+    else:
+        pipe.load_lora(pipe.dit, ModelConfig(path=str(turbo_path)), alpha=metadata["scale"])
+        metadata["storage"] = "cuda_float32"
     if timings is not None:
         pipe.video_vae.decode_video = timings.wrap(pipe.video_vae.decode_video, "video_decode")
         pipe.video_vae.encode_video = timings.wrap(pipe.video_vae.encode_video, "video_encode_lift")
